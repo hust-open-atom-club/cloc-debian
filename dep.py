@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-import os, sys, json
+import gzip
+import json
+import os
+import re
+import sys
 from typing import TypedDict
-import requests
-import gzip, re
 
+import requests
 
 dir = os.getcwd()
 working_dir = os.path.join(dir, "data")
@@ -21,7 +24,7 @@ def err(*args):
 # use http
 # when local file is avaliable, use local file
 def get_mirror_file(path) -> bytes:
-    url = "http://mirrors.hust.college/debian/"
+    url = "http://mirrors.hust.edu.cn/debian/"
     res = requests.get(url + path)
     return res.content
 
@@ -40,11 +43,16 @@ def download_file(path) -> str:
 
 
 def get_list_content() -> str:
-    path = "dists/stable/main/binary-amd64/Packages.gz"
-    file = get_mirror_file(path)
-    # extract .gz bytes
-    file = gzip.decompress(file)
-    return file.decode("utf-8")
+    dists = ["main", "contrib", "non-free", "non-free-firmware"]
+    path = list(map(lambda x: "dists/stable/" + x + "/binary-amd64/Packages.gz", dists))
+
+    ret = ""
+    for p in path:
+        file = get_mirror_file(p)
+        # extract .gz bytes
+        file = gzip.decompress(file)
+        ret += file.decode("utf-8")
+    return ret
 
 
 def parse_list() -> dict:
@@ -131,9 +139,23 @@ def main():
 
     trace("Writing result...")
     with open("result.csv", "w") as f:
-        f.write("name,refcount\n")
+        f.write("name,homepage,refcount\n")
         for key, count in countmap.items():
-            f.write(key + "," + str(count) + "\n")
+            if not key in lists:
+                err("Warning: package not found: " + key)
+                continue
+            f.write(
+                "{},{},{}\n".format(
+                    key,
+                    (
+                        lists[key]["Homepage"].replace(",", " ")
+                        if "Homepage" in lists[key]
+                        else ""
+                    ),
+                    str(count),
+                )
+            )
+    trace("Done! Result saved to result.csv")
 
 
 main()
